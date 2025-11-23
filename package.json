@@ -1,0 +1,20 @@
+{
+  "name": "aztec-hackaton",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aztec/accounts": "3.0.0-devnet.5",
+    "@aztec/aztec.js": "3.0.0-devnet.5",
+    "@aztec/test-wallet": "3.0.0-devnet.5",
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
+  }
+}
