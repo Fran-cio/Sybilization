@@ -65,6 +65,8 @@ aztec-private-voting/
 │   └── public/contract-address.json
 ├── scripts/                      # Deployment and interaction scripts
 │   ├── deploy_devnet.js         # Deploy to Aztec Devnet with initialize()
+│   ├── register_passport.js     # Register with ZKPassport (simulated)
+│   ├── cast_vote_passport.js    # Cast vote using ZKPassport registration
 │   ├── cast_vote.js             # Cast a vote (with optional reason)
 │   ├── read_votes.js            # Read voting results
 │   ├── finalize_voting.js       # Complete finalization workflow
@@ -106,8 +108,42 @@ The deployment automatically:
 - Calls `initialize(start, end)` with 7-day period
 - Sets creator from msg.sender
 
-### Cast a Vote
+### Register with ZKPassport (Identity Verification)
 
+```bash
+# Register your passport for voting
+node scripts/register_passport.js "Juan Pérez" "1995-03-20" "ARG" "AR123456789"
+
+# This generates:
+# - Unique passport_hash (nullifier) derived from your passport data
+# - Age verification (must be 18+)
+# - Saves registration to frontend/public/passport-registration.json
+```
+
+**Output Example:**
+```
+✅ ZKPassport Registration Successful!
+
+🔑 Your Passport Hash (Nullifier):
+0x3931e925acb91221c2b162891c7cf52d34dd9eb503cf1992a788b004ff8d63f1
+
+This hash is your unique voting identifier. It:
+  • Proves you are a unique person (via passport)
+  • Cannot be used twice (Aztec nullifier tree prevents it)
+  • Does not reveal your identity on-chain
+```
+
+### Cast a Vote with ZKPassport
+
+```bash
+# Vote using your registered ZKPassport
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote_passport.js 1
+
+# Vote with encrypted reason
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote_passport.js 2 "Best economic policy"
+```
+
+**Alternative: Direct vote (without separate registration)**
 ```bash
 # Vote for Candidate A (without reason)
 NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js 1 "passport_unique_id_1"
@@ -148,11 +184,39 @@ This script will:
 
 ## 🎮 Complete Workflow Example
 
+### With ZKPassport Identity Verification
+
 ```bash
 # 1. Deploy contract
 NODE_URL=https://devnet.aztec-labs.com/ node scripts/deploy_devnet.js
 
-# 2. Cast votes
+# 2. Register voters with ZKPassport
+node scripts/register_passport.js "Alice Smith" "1990-01-15" "USA" "US987654321"
+node scripts/register_passport.js "Bob Jones" "1985-05-20" "CAN" "CA123456789"
+node scripts/register_passport.js "Charlie Brown" "1995-11-30" "ARG" "AR555666777"
+
+# 3. Cast votes with ZKPassport
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote_passport.js 1
+# Re-register for different voter
+node scripts/register_passport.js "Bob Jones" "1985-05-20" "CAN" "CA123456789"
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote_passport.js 2
+node scripts/register_passport.js "Charlie Brown" "1995-11-30" "ARG" "AR555666777"
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote_passport.js 1 "Great candidate"
+
+# 4. Check results
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/read_votes.js
+
+# 5. Finalize (when voting period ends or admin ends early)
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/finalize_voting.js
+```
+
+### Quick Test (Without Registration)
+
+```bash
+# 1. Deploy contract
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/deploy_devnet.js
+
+# 2. Cast votes directly
 NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js 1 "alice"
 NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js 2 "bob"
 NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js 1 "charlie" "Great candidate"
@@ -174,16 +238,53 @@ NODE_URL=https://devnet.aztec-labs.com/ node scripts/finalize_voting.js
 
 ### 1. Identity Verification (ZKPassport)
 
-- User scans biometric passport with ZKPassport app
-- App generates unique identifier from passport data
-- **Privacy**: No personal data leaves the user's device
+This project demonstrates **two approaches** to ZKPassport integration:
+
+#### Production Approach (with ZK Proofs)
+
+In production, the full ZKPassport flow would work as follows:
+
+1. **Passport Scan**: User scans biometric passport with ZKPassport mobile app
+2. **Proof Generation**: App runs `register_identity` circuit (from `passport-zk-circuits-noir`) locally
+3. **Proof Outputs**: Circuit generates:
+   - `passport_hash`: Unique hash of passport (becomes nullifier)
+   - `dg1_commitment`: Commitment to passport data (DG1)
+   - `sk_hash`: Identity secret key hash
+4. **On-Chain Verification**: Contract verifies the ZK proof using `std::verify_proof_with_type`
+5. **Vote Casting**: If proof valid, vote is recorded with `passport_hash` as nullifier
+
+**Privacy**: No personal data (name, DOB, photo) leaves the user's device. Only cryptographic proofs.
+
+#### Hackathon Demo Approach (Simulated)
+
+For rapid testing and demonstration:
+
+1. **Registration Script**: `register_passport.js` simulates ZKPassport by:
+   - Taking passport data (name, DOB, nationality, passport number)
+   - Generating deterministic `passport_hash` via SHA-256
+   - Verifying age >= 18
+   - Saving registration locally
+
+2. **Vote Script**: `cast_vote_passport.js` uses saved `passport_hash` as nullifier
+
+**Why this works**: The nullifier mechanism is identical in both cases. The only difference is:
+- **Production**: passport_hash comes from ZK proof verification
+- **Demo**: passport_hash comes from local hash generation
+
+Both provide the same sybil resistance guarantees (one vote per unique passport).
 
 ### 2. Nullifier Generation
 
 ```typescript
-// Frontend derives nullifier from passport identifier
-const hash = crypto.createHash('sha256').update(uniqueIdentifier).digest('hex');
-const nullifier = new Fr(BigInt('0x' + hash.substring(0, 62)));
+// Demo: Generate passport_hash from passport data
+const passportData = `${passportNumber}|${nationality}|${dateOfBirth}|${name}`;
+const passport_hash = crypto.createHash('sha256').update(passportData).digest('hex');
+const nullifier = Fr.fromString('0x' + passport_hash);
+
+// Production: Extract passport_hash from ZK proof
+// const proof_outputs = await register_identity_circuit.execute(passport_data);
+// const passport_hash = proof_outputs[1]; // Second output of register_identity
+// const nullifier = Fr.fromString(passport_hash);
 ```
 
 ### 3. Private Voting
@@ -373,9 +474,20 @@ The `PrivateVoting` contract has these main functions:
 
 ## 🎯 Future Enhancements
 
-- [x] Time-based voting periods ✅ (Implemented)
-- [x] Vote metadata (reasons) ✅ (Implemented)
-- [x] Immutable results snapshot ✅ (Implemented)
+### Implemented ✅
+- [x] Time-based voting periods
+- [x] Vote metadata (encrypted reasons)
+- [x] Immutable results snapshot
+- [x] ZKPassport integration (demo with simulated proofs)
+
+### Next Steps for ZKPassport
+- [ ] **Full ZK Proof Verification**: Integrate `std::verify_proof_with_type` to verify actual ZKPassport proofs on-chain
+- [ ] **Age Queries**: Add `birth_date_lowerbound` parameter to restrict voting by age (e.g., 18+, 21+)
+- [ ] **Country Queries**: Add `citizenship_mask` parameter to limit voting to specific nationalities
+- [ ] **Recursive Proof Composition**: Verify ZKPassport proofs recursively within Aztec contract
+- [ ] **Frontend Integration**: Add ZKPassport mobile app scanning to frontend
+
+### Other Enhancements
 - [ ] Multi-poll support
 - [ ] Weighted voting (based on identity attributes)
 - [ ] Delegation mechanisms
