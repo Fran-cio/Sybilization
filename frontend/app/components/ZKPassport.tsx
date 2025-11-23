@@ -6,12 +6,35 @@ interface ZKPassportProps {
   onVerified: (nullifier: string) => void;
 }
 
+// Predefined mock wallets for testing
+const MOCK_WALLETS = [
+  {
+    id: 1,
+    name: "Alice 🦄",
+    nullifier: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+    description: "First test wallet"
+  },
+  {
+    id: 2,
+    name: "Bob 🐉",
+    nullifier: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+    description: "Second test wallet"
+  },
+  {
+    id: 3,
+    name: "Charlie 🦊",
+    nullifier: "0xaaaaaabbbbbbccccccddddddeeeeeeffffffaaaaaabbbbbbccccccddddddeeeeee",
+    description: "Third test wallet"
+  }
+];
+
 export default function ZKPassportComponent({ onVerified }: ZKPassportProps) {
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("Initializing ZKPassport...");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [useMockMode, setUseMockMode] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [selectedWallet, setSelectedWallet] = useState<number | null>(null);
 
   useEffect(() => {
     let eventSource: EventSource | null = null;
@@ -130,13 +153,24 @@ export default function ZKPassportComponent({ onVerified }: ZKPassportProps) {
     };
   }, [onVerified]);
 
-  const handleMockVerification = () => {
-    // Generate a mock nullifier for demo purposes
+  const handleMockWalletSelection = (walletId: number) => {
+    const wallet = MOCK_WALLETS.find(w => w.id === walletId);
+    if (wallet) {
+      setSelectedWallet(walletId);
+      setStatus(`Mock Verified! (${wallet.name})`);
+      setTimeout(() => {
+        onVerified(wallet.nullifier);
+      }, 500);
+    }
+  };
+
+  const handleRandomMockWallet = () => {
+    // Generate a random nullifier for demo purposes
     const mockNullifier = "0x" + Array.from({ length: 64 }, () => 
       Math.floor(Math.random() * 16).toString(16)
     ).join("");
     
-    setStatus("Mock Verified! (Demo Mode)");
+    setStatus("Mock Verified! (Random Wallet)");
     setTimeout(() => {
       onVerified(mockNullifier);
     }, 500);
@@ -150,12 +184,42 @@ export default function ZKPassportComponent({ onVerified }: ZKPassportProps) {
           ZKPassport service is currently unavailable.
         </p>
         
-        <button
-          onClick={handleMockVerification}
-          className="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold rounded-lg transition-colors"
-        >
-          Generate Mock Identity
-        </button>
+        <div className="w-full max-w-md space-y-4">
+          <p className="text-sm font-semibold text-gray-700 mb-2">Select a Mock Wallet:</p>
+          
+          {MOCK_WALLETS.map((wallet) => (
+            <button
+              key={wallet.id}
+              onClick={() => handleMockWalletSelection(wallet.id)}
+              className="w-full p-4 bg-white hover:bg-yellow-100 border-2 border-yellow-300 rounded-lg transition-colors text-left"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-bold text-gray-800">{wallet.name}</p>
+                  <p className="text-xs text-gray-600">{wallet.description}</p>
+                  <p className="text-xs text-gray-500 mt-1 font-mono truncate">{wallet.nullifier.slice(0, 20)}...</p>
+                </div>
+                <span className="text-2xl">→</span>
+              </div>
+            </button>
+          ))}
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-yellow-50 text-gray-500">or</span>
+            </div>
+          </div>
+          
+          <button
+            onClick={handleRandomMockWallet}
+            className="w-full px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-white font-bold rounded-lg transition-colors"
+          >
+            🎲 Generate Random Wallet
+          </button>
+        </div>
         
         <div className="mt-4 text-xs text-gray-500 text-center">
           <p>⚠️ This is a demo fallback</p>

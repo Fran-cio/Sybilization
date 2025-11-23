@@ -28,6 +28,10 @@ This project demonstrates a privacy-preserving voting system built on Aztec Netw
 - **Admin Controls**: Creator can `extend_voting()` or `end_voting()` early
 - **Immutable Snapshot**: `take_snapshot()` creates permanent record of final results
 - **Deterministic Admin**: Consistent admin keys across deployments for testing
+- **Admin Panel UI**: Complete admin dashboard for contract management
+- **Dynamic Contract Deployment**: Deploy new voting contracts directly from UI
+- **Mock Wallet System**: 3 predefined wallets (Alice, Bob, Charlie) + random generator for testing
+- **Identity Switching**: Unregister and re-register with different passports for testing
 
 ## 🏗️ Architecture
 
@@ -60,9 +64,23 @@ aztec-private-voting/
 │   ├── src/main.nr              # PrivateVoting contract
 │   └── target/                  # Compiled artifacts
 ├── frontend/                     # Next.js frontend
-│   ├── app/                     # Next.js app directory
-│   ├── lib/aztec.ts             # Aztec client utilities
-│   └── public/contract-address.json
+│   ├── app/
+│   │   ├── page.tsx             # Main voting UI with ZKPassport registration
+│   │   ├── layout.tsx           # Root layout
+│   │   ├── globals.css          # Styles
+│   │   └── components/
+│   │       ├── ZKPassport.tsx   # ZKPassport QR verification + mock wallets
+│   │       └── AdminPanel.tsx   # Admin control panel (floating UI)
+│   ├── lib/aztec.ts             # Aztec client utilities (legacy)
+│   ├── public/
+│   │   ├── contract-address.json         # Deployed contract info
+│   │   └── passport-registration.json    # Local passport storage
+│   └── .env.local               # Frontend environment variables
+├── api-server/                   # Express API server
+│   ├── server.js                # REST API with admin endpoints
+│   ├── package.json             # API server dependencies
+│   ├── .env                     # API server config
+│   └── README.md                # API documentation
 ├── scripts/                      # Deployment and interaction scripts
 │   ├── deploy_devnet.js         # Deploy to Aztec Devnet with initialize()
 │   ├── register_passport.js     # Register with ZKPassport (simulated)
@@ -72,7 +90,8 @@ aztec-private-voting/
 │   ├── finalize_voting.js       # Complete finalization workflow
 │   ├── check_voting_period.js   # View voting time parameters
 │   ├── take_snapshot.js         # Take immutable results snapshot
-│   └── test_lifecycle.js        # Full lifecycle integration test
+│   ├── test_lifecycle.js        # Full lifecycle integration test
+│   └── start_dev.sh             # Start frontend + API server together
 └── passport-zk-circuits-noir/   # ZKPassport circuits (OpenPassport)
 ```
 
@@ -82,18 +101,44 @@ aztec-private-voting/
 
 - Node.js v18+
 - Aztec CLI v3.0.0-devnet.5
-- ZKPassport mobile app (for production) or dev mode
 
 ### Installation
 
 ```bash
-# Install dependencies
+# Install root dependencies
 npm install
+
+# Install API server dependencies
+cd api-server && npm install && cd ..
+
+# Install frontend dependencies
+cd frontend && npm install && cd ..
 
 # Compile the contract
 cd contracts
 bash ../scripts/compile_contract.sh
 ```
+
+### Run the Full Stack
+
+```bash
+# Option 1: Run both servers with one script
+bash scripts/start_dev.sh
+
+# Option 2: Run separately
+# Terminal 1 - API Server
+cd api-server && NODE_URL=https://devnet.aztec-labs.com/ npm start
+
+# Terminal 2 - Frontend
+cd frontend && npm run dev
+```
+
+Then open http://localhost:3000 in your browser.
+
+**The system includes:**
+- 🌐 Frontend (Next.js) on port 3000
+- 📡 API Server (Express) on port 3001
+- 🔗 Connected to Aztec Devnet
 
 ### Deploy to Devnet
 
@@ -110,6 +155,45 @@ The deployment automatically:
 
 ### Register with ZKPassport (Identity Verification)
 
+You have **two options** to register your identity:
+
+#### Option 1: ZKPassport Mobile App (Recommended - Real ZK Proofs)
+
+1. Open http://localhost:3000
+2. Click "ZKPassport App" option
+3. Scan QR code with ZKPassport mobile app
+4. Enable Dev Mode in app (long press bottom of screen)
+5. Complete verification on your phone
+6. Passport hash automatically generated from ZK proof
+
+**Mock Mode Fallback**: If ZKPassport service is unavailable, you'll see a mock mode with:
+- **3 Predefined Wallets**: Alice 🦄, Bob 🐉, Charlie 🦊 (each with unique nullifiers)
+- **Random Wallet Generator**: Create unlimited random test identities
+- **Quick Testing**: Perfect for demos and multiple vote testing
+
+**Privacy**: Biometric passport data never leaves your device. Only a ZK proof is generated.
+
+#### Option 2: Manual Entry (For Testing/Demo)
+
+**Via UI:**
+1. Open http://localhost:3000
+2. Click "Manual Entry" option
+3. Fill in passport details (name, DOB, nationality, passport number)
+4. Age verification automatically checked (must be 18+)
+5. Passport hash generated and saved locally
+
+**🔄 Switching Identities**:
+- Click "Unregister and use different passport" button before voting
+- Allows testing with multiple identities (mock wallets or manual entries)
+- After voting: Use "Switch Identity" button to clear registration and test with another wallet
+- Perfect for testing multiple vote scenarios
+
+**Via CLI:**
+- Click "Unregister and use different passport" button before voting
+- Allows testing with multiple identities (mock wallets or manual entries)
+- Cannot unregister after casting a vote
+
+**Via CLI:**
 ```bash
 # Register your passport for voting
 node scripts/register_passport.js "Juan Pérez" "1995-03-20" "ARG" "AR123456789"
@@ -155,8 +239,23 @@ NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js 2 "passport_un
 NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js 3 "passport_unique_id_3"
 ```
 
+### Admin Panel (UI Only) 👑
+
+**Access**: Click "Admin Panel" button in bottom-right corner of the UI
+
+**Available Functions** (requires admin/creator account):
+- **Extend Voting Period**: Change end time to extend voting
+- **End Voting Early**: Immediately close voting period
+- **Take Snapshot**: Create immutable record of final results
+- **Deploy New Contract**: Deploy new voting contract with custom time period
+
+**Admin Authentication**: Automatically authenticated using deterministic admin keys matching the deployment account
+
 ### Check Voting Status
 
+**Via UI**: Status banner shows active/closed state with dates
+
+**Via CLI:**
 ```bash
 # View voting period and current time
 NODE_URL=https://devnet.aztec-labs.com/ node scripts/check_voting_period.js
@@ -164,6 +263,9 @@ NODE_URL=https://devnet.aztec-labs.com/ node scripts/check_voting_period.js
 
 ### Read Results
 
+**Via UI**: Click "Show Results" button for live tally of all 3 candidates
+
+**Via CLI:**
 ```bash
 # View current voting results
 NODE_URL=https://devnet.aztec-labs.com/ node scripts/read_votes.js
@@ -171,6 +273,9 @@ NODE_URL=https://devnet.aztec-labs.com/ node scripts/read_votes.js
 
 ### Finalize Voting
 
+**Via UI**: Use Admin Panel → End Voting → Take Snapshot
+
+**Via CLI:**
 ```bash
 # Complete finalization workflow (end voting + snapshot)
 NODE_URL=https://devnet.aztec-labs.com/ node scripts/finalize_voting.js
