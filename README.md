@@ -10,16 +10,24 @@ Private voting system using Aztec Network and ZKPassport for Sybil-resistant ano
 
 This project demonstrates a privacy-preserving voting system built on Aztec Network that uses ZKPassport for biometric identity verification without compromising user privacy.
 
-**Deployed on Aztec Devnet**: `0x1cd66e146301166c9ba7af24e400ec3760d0aaed77236454f647e6bb663dd8df`
+**Deployed on Aztec Devnet**: `0x2bbe365ae58181933e2203b150c65b945dda12c541ef4611ab445591b6ed7c06`
 
 ## ✅ Working Features
 
+### Core Features
 - **Private Voting**: Cast votes privately using Aztec's private execution environment
 - **Sybil Resistance**: Each passport can only vote once (nullifier-based)
 - **Transparent Results**: Vote counts are public and auditable
 - **ZKPassport Integration**: Biometric passport verification for identity
 - **Devnet Deployment**: Fully deployed and tested on Aztec Devnet
 - **Sponsored Fees**: Uses Aztec's sponsored FPC for gasless transactions
+
+### New Features 🆕
+- **Time-Based Voting**: Set start/end times with `initialize(start, end)` - voting only counts within period
+- **Vote Metadata**: Optional encrypted reasons for votes (stored as Field hash)
+- **Admin Controls**: Creator can `extend_voting()` or `end_voting()` early
+- **Immutable Snapshot**: `take_snapshot()` creates permanent record of final results
+- **Deterministic Admin**: Consistent admin keys across deployments for testing
 
 ## 🏗️ Architecture
 
@@ -56,11 +64,13 @@ aztec-private-voting/
 │   ├── lib/aztec.ts             # Aztec client utilities
 │   └── public/contract-address.json
 ├── scripts/                      # Deployment and interaction scripts
-│   ├── compile_contract.sh      # Compile Noir contract
-│   ├── deploy_devnet.js         # Deploy to Aztec Devnet
-│   ├── cast_vote.js             # Cast a vote
+│   ├── deploy_devnet.js         # Deploy to Aztec Devnet with initialize()
+│   ├── cast_vote.js             # Cast a vote (with optional reason)
 │   ├── read_votes.js            # Read voting results
-│   └── demo_complete_flow.js    # Complete demo flow
+│   ├── finalize_voting.js       # Complete finalization workflow
+│   ├── check_voting_period.js   # View voting time parameters
+│   ├── take_snapshot.js         # Take immutable results snapshot
+│   └── test_lifecycle.js        # Full lifecycle integration test
 └── passport-zk-circuits-noir/   # ZKPassport circuits (OpenPassport)
 ```
 
@@ -86,41 +96,79 @@ bash ../scripts/compile_contract.sh
 ### Deploy to Devnet
 
 ```bash
-# Deploy contract to Aztec Devnet
-node scripts/deploy_devnet.js
+# Deploy contract to Aztec Devnet with 7-day voting period
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/deploy_devnet.js
 ```
+
+The deployment automatically:
+- Creates admin account with deterministic keys
+- Deploys PrivateVoting contract
+- Calls `initialize(start, end)` with 7-day period
+- Sets creator from msg.sender
 
 ### Cast a Vote
 
 ```bash
-# Vote for Candidate A
-NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js "Candidate A" "passport_unique_id_1"
+# Vote for Candidate A (without reason)
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js 1 "passport_unique_id_1"
 
-# Vote for Candidate B
-NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js "Candidate B" "passport_unique_id_2"
+# Vote for Candidate B (with encrypted reason)
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js 2 "passport_unique_id_2" "Best economic policy"
+
+# Vote for Candidate C
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js 3 "passport_unique_id_3"
+```
+
+### Check Voting Status
+
+```bash
+# View voting period and current time
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/check_voting_period.js
 ```
 
 ### Read Results
 
 ```bash
-# View voting results
+# View current voting results
 NODE_URL=https://devnet.aztec-labs.com/ node scripts/read_votes.js
 ```
 
-## 🎮 Demo Flow
-
-Run the complete demo (deploy + vote + verify):
+### Finalize Voting
 
 ```bash
-node scripts/demo_complete_flow.js
+# Complete finalization workflow (end voting + snapshot)
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/finalize_voting.js
 ```
 
-This will:
-1. Deploy the contract to devnet
-2. Create test voters
-3. Cast multiple votes
-4. Test double-vote prevention
-5. Display results
+This script will:
+1. Check voting status (start/end times, vote counts)
+2. Prompt Y/N to end voting early with admin (if active)
+3. Take immutable snapshot of final results
+4. Display comprehensive summary
+
+## 🎮 Complete Workflow Example
+
+```bash
+# 1. Deploy contract
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/deploy_devnet.js
+
+# 2. Cast votes
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js 1 "alice"
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js 2 "bob"
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/cast_vote.js 1 "charlie" "Great candidate"
+
+# 3. Check results
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/read_votes.js
+
+# 4. Finalize (when voting period ends or admin ends early)
+NODE_URL=https://devnet.aztec-labs.com/ node scripts/finalize_voting.js
+```
+
+**Result**: 
+- Candidate A: 2 votes (66.7%)
+- Candidate B: 1 vote (33.3%)
+- Candidate C: 0 votes (0%)
+- Immutable snapshot taken ✓
 
 ## 🔐 How It Works
 
@@ -143,10 +191,17 @@ const nullifier = new Fr(BigInt('0x' + hash.substring(0, 62)));
 ```noir
 // Noir contract (executed privately on user's device)
 #[external("private")]
-fn cast_vote(candidate: Field, nullifier: Field) {
+fn cast_vote(candidate: Field, nullifier: Field, reason: Field) {
     // Push nullifier to Aztec's nullifier tree
     // Automatic revert if nullifier already exists
     context.push_nullifier(nullifier);
+    
+    // Store encrypted vote reason if provided
+    if reason != 0 {
+        PrivateVoting::at(context.this_address())
+            ._store_vote_reason(nullifier, reason)
+            .enqueue(&mut context);
+    }
     
     // Enqueue public function to update tally
     PrivateVoting::at(context.this_address())
@@ -161,13 +216,35 @@ fn cast_vote(candidate: Field, nullifier: Field) {
 - Aztec's nullifier tree prevents reuse
 - Attempting to vote twice with same passport → **Transaction reverts**
 
-### 5. Transparent Results
+### 5. Time-Based Validation
 
 ```noir
-// Anyone can read vote counts (public data)
+// Votes only count within voting period
+#[external("public")]
+#[internal]
+fn add_to_tally_public(candidate: Field) {
+    let now = context.timestamp();
+    assert(now >= storage.start_time.read(), "Voting has not started yet");
+    assert(now <= storage.end_time.read(), "Voting has ended");
+    
+    let new_tally = storage.tally.at(candidate).read() + 1;
+    storage.tally.at(candidate).write(new_tally);
+}
+```
+
+### 6. Transparent Results & Snapshot
+
+```noir
+// Anyone can read current vote counts (public data)
 #[external("utility")]
 unconstrained fn get_vote(candidate: Field) -> Field {
     storage.tally.at(candidate).read()
+}
+
+// Anyone can read immutable snapshot (after voting ends)
+#[external("utility")]
+unconstrained fn get_snapshot(candidate: Field) -> Field {
+    storage.final_snapshot.at(candidate).read()
 }
 ```
 
@@ -182,14 +259,9 @@ cd contracts
 aztec-nargo test
 ```
 
-**Tests implemented**:
-- ✅ Storage initialization
-- ✅ Nullifier format validation
-- ✅ Candidate ID validation
-- ✅ Tally increment logic
-- ✅ Voting state transitions
+**Note**: Noir unit tests are limited (cannot instantiate contracts). Real testing via integration tests.
 
-**Result**: All 5 tests passing
+**Result**: 1 placeholder test passing (documents integration test coverage)
 
 ### Integration Tests
 
@@ -204,17 +276,27 @@ node scripts/cast_vote.js "Candidate A" "test_passport_1"
 # Error: Invalid tx: Existing nullifier ✓
 ```
 
-#### Test Voting Lifecycle
+#### Test Complete Lifecycle
 
 ```bash
 NODE_URL=https://devnet.aztec-labs.com/ node scripts/test_lifecycle.js
 ```
 
 This tests:
-- ✅ Voting works before end_voting()
-- ✅ end_voting() executes successfully
-- ✅ Voting blocked after end_voting()
+- ✅ Contract initialization with time period
+- ✅ Voting works within active period
+- ✅ Time validation (votes before start/after end blocked)
+- ✅ Admin controls (extend_voting, end_voting)
+- ✅ Vote metadata (with/without reasons)
+- ✅ Immutable snapshot creation
 - ✅ Results remain readable after voting ends
+
+**Proven on Devnet**:
+- Contract: `0x2bbe365ae58181933e2203b150c65b945dda12c541ef4611ab445591b6ed7c06`
+- 3 votes cast (A:2, B:1, C:0)
+- Voting ended early by admin
+- Snapshot taken successfully
+- All features working ✓
 
 ### Verify Privacy
 
@@ -226,14 +308,18 @@ This tests:
 ## 📊 Current Deployment
 
 **Aztec Devnet**
-- Contract: `0x1cd66e146301166c9ba7af24e400ec3760d0aaed77236454f647e6bb663dd8df`
+- Contract: `0x2bbe365ae58181933e2203b150c65b945dda12c541ef4611ab445591b6ed7c06`
+- Admin: `0x01a2704a2b74776ee3b00bf368f94422c1b38361ae970ac98fae789a0b6494b8`
 - Network: `https://devnet.aztec-labs.com/`
 - Sponsored FPC: `0x280e5686a148059543f4d0968f9a18cd4992520fcd887444b8689bf2726a1f97`
 - Explorer: https://devnet-explorer.aztec.network/
 
-**Current Votes**:
-- Candidate A: 1 vote (50%)
-- Candidate B: 1 vote (50%)
+**Latest Test Results**:
+- Candidate A: 2 votes (66.7%)
+- Candidate B: 1 vote (33.3%)
+- Candidate C: 0 votes (0%)
+- Status: Voting ended, snapshot taken ✓
+- Voting Period: 2025-11-23 to 2025-11-30 (ended early by admin)
 
 ## 🛠️ Key Technologies
 
@@ -245,12 +331,26 @@ This tests:
 
 ## 📝 Smart Contract
 
-The `PrivateVoting` contract has 4 main functions:
+The `PrivateVoting` contract has these main functions:
 
-1. **`cast_vote(candidate, nullifier)`** - Private function to cast a vote
-2. **`add_to_tally_public(candidate)`** - Internal function to update vote count
-3. **`end_voting()`** - Public function to close voting period
-4. **`get_vote(candidate)`** - Unconstrained function to read vote count
+### Core Functions
+1. **`initialize(start, end)`** - #[initializer] Set voting period (called once at deployment)
+2. **`cast_vote(candidate, nullifier, reason)`** - Private function to cast a vote with optional reason
+3. **`add_to_tally_public(candidate)`** - Internal function to update vote count (validates time)
+
+### Admin Functions (Creator Only)
+4. **`extend_voting(new_end_time)`** - Extend the voting period
+5. **`end_voting()`** - End voting early (sets end_time to now)
+
+### Snapshot Functions
+6. **`take_snapshot()`** - Create immutable snapshot of results (once only, after voting ends)
+
+### View Functions (Unconstrained)
+7. **`get_vote(candidate)`** - Read current vote count
+8. **`get_snapshot(candidate)`** - Read immutable snapshot result
+9. **`is_snapshot_taken()`** - Check if snapshot exists
+10. **`get_vote_reason(nullifier)`** - Read encrypted vote reason
+11. **`get_start_time()`, `get_end_time()`, `get_creator()`** - Read contract parameters
 
 ## 🔑 Key Insights
 
@@ -266,17 +366,23 @@ The `PrivateVoting` contract has 4 main functions:
 
 - ✅ Who voted: **Hidden** (private execution)
 - ✅ Vote choice: **Hidden** (private execution)
+- ✅ Vote reason: **Encrypted** (only voter knows plaintext)
 - ✅ Vote count: **Public** (transparent results)
 - ✅ Double voting: **Impossible** (nullifier tree)
+- ✅ Final results: **Immutable** (snapshot cannot be changed)
 
 ## 🎯 Future Enhancements
 
+- [x] Time-based voting periods ✅ (Implemented)
+- [x] Vote metadata (reasons) ✅ (Implemented)
+- [x] Immutable results snapshot ✅ (Implemented)
 - [ ] Multi-poll support
-- [ ] Time-based voting periods
-- [ ] Weighted voting
+- [ ] Weighted voting (based on identity attributes)
 - [ ] Delegation mechanisms
 - [ ] Integration with other identity providers
 - [ ] Mobile app for direct voting
+- [ ] Privacy-preserving vote reason reveal (ZK proof)
+- [ ] Quadratic voting
 
 ## 📚 Resources
 
