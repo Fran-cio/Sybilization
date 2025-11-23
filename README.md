@@ -91,7 +91,9 @@ aztec-private-voting/
 │   ├── check_voting_period.js   # View voting time parameters
 │   ├── take_snapshot.js         # Take immutable results snapshot
 │   ├── test_lifecycle.js        # Full lifecycle integration test
-│   └── start_dev.sh             # Start frontend + API server together
+│   └── compile_contract.sh      # Compile contracts with post-processing
+├── setup.sh                      # One-command setup script for judges
+├── start.sh                      # One-command start script (API + frontend)
 └── passport-zk-circuits-noir/   # ZKPassport circuits (OpenPassport)
 ```
 
@@ -158,10 +160,10 @@ bash ../scripts/compile_contract.sh
 ### Run the Full Stack
 
 ```bash
-# Option 1: Run both servers with one script
-bash scripts/start_dev.sh
+# Recommended: Use the automated start script
+bash start.sh
 
-# Option 2: Run separately
+# Or run separately if needed:
 # Terminal 1 - API Server
 cd api-server && NODE_URL=https://devnet.aztec-labs.com/ npm start
 
