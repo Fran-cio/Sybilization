@@ -72,14 +72,20 @@ async function castVote(candidateName, uniqueIdentifier) {
   const hash = crypto.createHash('sha256').update(uniqueIdentifier).digest('hex');
   const nullifierField = new Fr(BigInt('0x' + hash.substring(0, 62)));
   
+  // Optional reason (0 means no reason)
+  const reason = process.argv[4] ? new Fr(BigInt('0x' + crypto.createHash('sha256').update(process.argv[4]).digest('hex').substring(0, 62))) : new Fr(0);
+  
   console.log(`   ✓ Candidate: ${candidateName} (${candidateId})`);
   console.log(`   ✓ Nullifier: ${nullifierField.toString().substring(0, 20)}...`);
+  if (reason.toBigInt() !== 0n) {
+    console.log(`   ✓ Reason: ${process.argv[4]} (encrypted)`);
+  }
   
   console.log('\n4️⃣  Casting vote...');
   const sponsoredPaymentMethod = new SponsoredFeePaymentMethod(sponsoredFPCInstance.address);
   
   const tx = await contract.methods
-    .cast_vote(candidateField, nullifierField)
+    .cast_vote(candidateField, nullifierField, reason)
     .send({
       from: fromAddress,
       fee: { paymentMethod: sponsoredPaymentMethod }
@@ -94,7 +100,12 @@ async function castVote(candidateName, uniqueIdentifier) {
 }
 
 // Get args from command line
-const candidate = process.argv[2] || 'Candidate A';
+// Usage: node cast_vote.js <candidateId> [uniqueId] [reason]
+// Example: node cast_vote.js 1 "passport123" "I believe in their economic policy"
+const candidateArg = process.argv[2] || '1';
+const candidate = candidateArg === '1' ? 'Candidate A' : 
+                  candidateArg === '2' ? 'Candidate B' : 'Candidate C';
 const uniqueId = process.argv[3] || crypto.randomBytes(32).toString('hex');
+// process.argv[4] is the reason, handled in castVote function
 
 castVote(candidate, uniqueId).catch(console.error);

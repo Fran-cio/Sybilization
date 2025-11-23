@@ -1,8 +1,8 @@
 {
-  "address": "0x1cd66e146301166c9ba7af24e400ec3760d0aaed77236454f647e6bb663dd8df",
-  "deployedAt": "2025-11-23T02:41:02.898Z",
+  "address": "0x2bbe365ae58181933e2203b150c65b945dda12c541ef4611ab445591b6ed7c06",
+  "deployedAt": "2025-11-23T05:26:14.703Z",
   "network": "devnet",
   "nodeUrl": "https://devnet.aztec-labs.com/",
-  "adminAddress": "0x1c2efc11e61f10f5f8f8edccc9894fd250112dbe96274efcb06bc2160d9ba71a",
-  "txHash": "0x2eda4ac6b934617ea9d1bf6592c39f2610b493ca83906b015974e5526010ac57"
+  "adminAddress": "0x01a2704a2b74776ee3b00bf368f94422c1b38361ae970ac98fae789a0b6494b8",
+  "txHash": "0x1d11aac5262d4d751f84a3f1b6ac4f3e60b1fd1227bed3bd78d90b6a6f8a97b0"
 }

@@ -41,38 +41,50 @@ async function main() {
   );
   
   console.log('👤 Creating Schnorr account...');
-  const secretKey = Fr.random();
-  const signingKey = GrumpkinScalar.random();
-  const salt = Fr.random();
+  // Use deterministic keys for consistent admin across deployments
+  const secretKey = Fr.fromString('0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef');
+  const signingKey = GrumpkinScalar.fromString('0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890');
+  const salt = Fr.fromString('0x9876543210fedcba9876543210fedcba9876543210fedcba9876543210fedcba');
   
   const account = await testWallet.createSchnorrAccount(secretKey, salt, signingKey);
   const deployerAddress = account.address;
   console.log(`Using account: ${deployerAddress.toString()}`);
   
-  const deployMethod = await account.getDeployMethod();
-  console.log('📝 Deploying account with sponsored fees...');
+  // Try to deploy account, skip if already exists
+  console.log('📝 Deploying account with sponsored fees (or using existing)...');
   try {
+      const deployMethod = await account.getDeployMethod();
       const tx = await deployMethod.send({ 
         from: AztecAddress.ZERO,
         fee: { paymentMethod: sponsoredPaymentMethod }
       }).wait();
       console.log(`✓ Account deployed (tx: ${tx.txHash})`);
   } catch (e) {
-      console.error("Error deploying account:", e);
-      throw e;
+      if (e.message && e.message.includes('Existing nullifier')) {
+        console.log(`✓ Account already exists on devnet, continuing...`);
+      } else {
+        console.error("Error deploying account:", e);
+        throw e;
+      }
   }
   
   // Load contract artifact
   const artifactPath = path.join(__dirname, '../contracts/target/private_voting-PrivateVoting.json');
   const artifact = loadContractArtifact(JSON.parse(fs.readFileSync(artifactPath, 'utf8')));
   
+  // Set voting period: starts now, ends in 7 days
+  const now = Math.floor(Date.now() / 1000);
+  const startTime = now;
+  const endTime = now + (7 * 24 * 60 * 60); // 7 days from now
+  
   console.log('Deploying PrivateVoting contract to Devnet...');
   console.log('Note: This may take ~36 seconds due to Devnet block times');
-  console.log(`Constructor args: [] (no constructor)`);
+  console.log(`Initializer args: [start: ${startTime}, end: ${endTime}]`);
+  console.log(`Voting period: ${new Date(startTime * 1000).toISOString()} to ${new Date(endTime * 1000).toISOString()}`);
   
   try {
-    // Use the correct Contract.deploy pattern with empty args (no constructor)
-    const deploymentTx = Contract.deploy(testWallet, artifact, [])
+    // Deploy with initializer args (start_time, end_time)
+    const deploymentTx = Contract.deploy(testWallet, artifact, [startTime, endTime])
       .send({
         from: deployerAddress,
         fee: {
@@ -87,7 +99,8 @@ async function main() {
     console.log(`⛏️ Transaction mined in block ${receipt.blockNumber}`);
     
     const contract = await deploymentTx.deployed();
-    console.log(`✅ Contract deployed at: ${contract.address.toString()}`);
+    console.log(`✅ Contract deployed and initialized at: ${contract.address.toString()}`);
+    console.log(`   Creator set to: ${deployerAddress.toString()} (from msg.sender)`);
     
     // Save contract address for frontend
     const addressFile = path.join(__dirname, '../frontend/public/contract-address.json');

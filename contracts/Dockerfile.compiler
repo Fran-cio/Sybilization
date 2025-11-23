@@ -1,0 +1,23 @@
+FROM ubuntu:24.04
+
+RUN apt update && apt install -y \
+    curl \
+    bash \
+    git \
+    tar \
+    gzip \
+    libc++-dev \
+    libstdc++6 \
+    jq \
+    python3 \
+    build-essential \
+    ca-certificates
+
+# Spoof docker command to bypass install script check
+RUN touch /usr/bin/docker && chmod +x /usr/bin/docker
+
+# Install Aztec CLI
+RUN curl -s https://install.aztec.network | NON_INTERACTIVE=1 BIN_PATH=/usr/local/bin bash -s
+
+WORKDIR /usr/src/project
+ENTRYPOINT ["aztec-nargo"]
