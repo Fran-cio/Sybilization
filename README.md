@@ -95,7 +95,43 @@ aztec-private-voting/
 └── passport-zk-circuits-noir/   # ZKPassport circuits (OpenPassport)
 ```
 
-## 🚀 Quick Start
+## 🚀 Quick Start for Judges
+
+### Prerequisites
+
+- Node.js v18+
+- Aztec CLI v3.0.0-devnet.5
+  ```bash
+  bash -i <(curl -s install.aztec.network)
+  ```
+
+### One-Command Setup & Run
+
+```bash
+# 1. Setup (compile contracts + install all dependencies)
+bash setup.sh
+
+# 2. Start (runs API server + frontend)
+bash start.sh
+
+# 3. Open http://localhost:3000 in your browser
+```
+
+That's it! The setup script will:
+- ✅ Compile Noir contracts
+- ✅ Install all dependencies (root, API, frontend)
+- ✅ Create environment files
+
+The start script will:
+- 🚀 Start API server on http://localhost:3001
+- 🎨 Start frontend on http://localhost:3000
+- 🔗 Connect to Aztec Devnet automatically
+
+Press `Ctrl+C` to stop all services.
+
+---
+
+## 🔧 Manual Installation (Advanced)
 
 ### Prerequisites
 
